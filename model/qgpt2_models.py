@@ -277,7 +277,7 @@ class SingleHeadQGPT2Model(QGPT2LMHeadModel):
         )
 
     @classmethod
-    def from_pretrained(
+    def wtrained(
         cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs
     ):
         """Load the model from pre-trained files and manually load the new Conv1D module's weights.
