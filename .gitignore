@@ -1,0 +1,5 @@
+.vscode/
+gpt2_model/
+gpt2_tokenizer/
+.artifacts/
+__pycache__/
