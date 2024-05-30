@@ -6,13 +6,13 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 from concrete.fhe.compilation import Circuit, Configuration
-from qgpt2_class import QGPT2
-from quant_framework import DualArray
+from .qgpt2_class import QGPT2
+from .quant_framework import DualArray
 from transformers import GPT2LMHeadModel
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
 from transformers.pytorch_utils import Conv1D
-from utility_functions import slice_ordered_dict
+from .utility_functions import slice_ordered_dict
 
 
 class QGPT2Attention(GPT2Attention):

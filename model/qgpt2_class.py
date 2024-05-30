@@ -4,8 +4,8 @@ import numpy as np
 import torch
 from concrete.fhe.compilation import Circuit, Configuration
 from concrete.fhe.tracing import Tracer
-from load_huggingface import get_gpt2_model
-from quant_framework import DualArray, Quantizer
+from .load_huggingface import get_gpt2_model
+from .quant_framework import DualArray, Quantizer
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
 from concrete import fhe

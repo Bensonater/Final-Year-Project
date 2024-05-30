@@ -4,9 +4,7 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from concrete.fhe.tracing import Tracer
-from utility_functions import enc_split, max_fhe_relu, simple_slice
-
-EPSILON = 2**-11
+from .utility_functions import enc_split, max_fhe_relu, simple_slice
 
 def compute_scale_zp_from_float_int(
     float_array: np.ndarray, int_array: np.ndarray, is_symmetric: bool = True
