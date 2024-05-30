@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from concrete.fhe.compilation import Circuit, Configuration
 from concrete.fhe.tracing import Tracer
-from .load_huggingface import get_gpt2_model
 from .quant_framework import DualArray, Quantizer
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
+from transformers.models.gpt2 import GPT2LMHeadModel
 
 from concrete import fhe
 
@@ -208,7 +208,7 @@ class QGPT2(QuantizedModel):
         self.layer = layer
 
         # Load the model in order to retrieve GPT-2's weights and hyper-parameters
-        self.float_torch_model = get_gpt2_model("gpt2_model")
+        self.float_torch_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         self.hyper_params = self.float_torch_model.config.to_dict()
         self.weights = dict(self.float_torch_model.state_dict())
 
