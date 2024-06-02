@@ -127,7 +127,6 @@ class QuantizedModel:
 
                 # The circuit is expecting an input with a batch size of 1 in the first axis
                 q_x = np.expand_dims(q_x, axis=0)
-
                 if fhe == "simulate":
                     q_y = self.circuit.simulate(q_x)
 

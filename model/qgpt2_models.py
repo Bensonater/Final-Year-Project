@@ -8,8 +8,7 @@ import torch
 from concrete.fhe.compilation import Circuit, Configuration
 from .qgpt2_class import QGPT2
 from .quant_framework import DualArray
-from transformers import GPT2LMHeadModel
-from transformers.models.gpt2.configuration_gpt2 import GPT2Config
+from transformers.models.gpt2 import GPT2LMHeadModel, GPT2ForSequenceClassification, GPT2Config, GPT2PreTrainedModel
 from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
 from transformers.pytorch_utils import Conv1D
 from .utility_functions import slice_ordered_dict
@@ -47,80 +46,87 @@ class QGPT2Attention(GPT2Attention):
         self.true_float = true_float
 
 
-class QGPT2LMHeadModel(GPT2LMHeadModel):
-    """Base class for integrating quantized operations within GPT2LMHeadModel's forward pass."""
+# Wrapper function to set base class 
+def qGPT2Model(base_class: GPT2PreTrainedModel = GPT2LMHeadModel):
 
-    def __init__(
-        self,
-        config: GPT2Config,
-        n_bits: int,
-        attention_module: Union[QGPT2SingleHeadAttention, QGPT2MultiHeadsAttention],
-        layer: int = 0,
-    ):
-        """Initialize the base class.
+    class QGPT2Model(base_class):
+        """Base class for integrating quantized operations within GPT2LMHeadModel's forward pass."""
 
-        This class essentially overwrites GPT-2's attention module found in the layer whose index is
-        given with the given quantized module.
+        def __init__(
+            self,
+            config: GPT2Config,
+            n_bits: int,
+            attention_module: Union[QGPT2SingleHeadAttention, QGPT2MultiHeadsAttention],
+            layer: int = 0,
+        ):
+            """Initialize the base class.
 
-        Args:
-            config (GPT2Config): GPT-2's configuration.
-            n_bits (int): The number of bits to use for quantizing the inputs, weights and
-                activations.
-            attention (Union[QGPT2SingleHeadAttention, QGPT2MultiHeadsAttention]): The quantized attention module
-                to consider.
-            layer (int): The index representing the GPT-2 layer to consider. Default to 0.
-        """
-        assert 0 <= layer <= 11, f"The GPT-2 model only has 12 layers, but got {layer}"
+            This class essentially overwrites GPT-2's attention module found in the layer whose index is
+            given with the given quantized module.
 
-        super().__init__(config)
+            Args:
+                config (GPT2Config): GPT-2's configuration.
+                n_bits (int): The number of bits to use for quantizing the inputs, weights and
+                    activations.
+                attention (Union[QGPT2SingleHeadAttention, QGPT2MultiHeadsAttention]): The quantized attention module
+                    to consider.
+                layer (int): The index representing the GPT-2 layer to consider. Default to 0.
+            """
+            assert 0 <= layer <= 11, f"The GPT-2 model only has 12 layers, but got {layer}"
 
-        self.transformer.h[layer].attn = attention_module(config, n_bits=n_bits, layer=layer)
+            super().__init__(config)
 
-    @property
-    def q_attention(self) -> GPT2Attention:
-        """Get GPT-2's attention module found in the first layer.
+            self.transformer.h[layer].attn = attention_module(config, n_bits=n_bits, layer=layer)
 
-        Returns:
-            GPT2Attention: The attention module.
-        """
-        return self.transformer.h[0].attn
+            # for i in range(12):
+            #     self.transformer.h[i].attn = attention_module(config, n_bits=n_bits, layer=i)
 
-    def set_fhe_mode(self, fhe: str = "disable", true_float: bool = False):
-        """Set the FHE mode for the module's forward pass.
+        @property
+        def q_attention(self) -> GPT2Attention:
+            """Get GPT-2's attention module found in the first layer.
 
-        fhe (str): The FHE mode to consider, either "disable", "simulate" or "execute". Default
-            to "disable".
-        true_float (bool): If the FHE mode is set to "disable", indicate if the operations
-            should be in floating points instead of being quantized. Default to False.
-        """
-        self.q_attention.set_fhe_mode(fhe=fhe, true_float=true_float)
+            Returns:
+                GPT2Attention: The attention module.
+            """
+            return self.transformer.h[0].attn
 
-    def compile(
-        self, inputset_ids: torch.Tensor, configuration: Optional[Configuration] = None
-    ) -> Circuit:
-        """Compile the model using the stored calibration data.
+        def set_fhe_mode(self, fhe: str = "disable", true_float: bool = False):
+            """Set the FHE mode for the module's forward pass.
 
-        Args:
-            inputset_ids (torch.Tensor): The token ids to consider as an inputset.
-            configuration (Optional[Configuration]): The configuration to use during compilation.
-                Default to None.
+            fhe (str): The FHE mode to consider, either "disable", "simulate" or "execute". Default
+                to "disable".
+            true_float (bool): If the FHE mode is set to "disable", indicate if the operations
+                should be in floating points instead of being quantized. Default to False.
+            """
+            self.q_attention.set_fhe_mode(fhe=fhe, true_float=true_float)
 
-        Returns:
-            Circuit: The underlying FHE circuit.
-        """
+        def compile(
+            self, inputset_ids: torch.Tensor, configuration: Optional[Configuration] = None
+        ) -> Circuit:
+            """Compile the model using the stored calibration data.
 
-        # Disable the FHE execution, as the following forward pass should be made in the clear along
-        # floating point values. This is done in order to properly calibrate and store the
-        # quantization parameters such as the scale and zero points
-        self.set_fhe_mode(fhe="disable", true_float=False)
+            Args:
+                inputset_ids (torch.Tensor): The token ids to consider as an inputset.
+                configuration (Optional[Configuration]): The configuration to use during compilation.
+                    Default to None.
 
-        # Execute a full pass in the clear
-        self.forward(inputset_ids, use_cache=False)
+            Returns:
+                Circuit: The underlying FHE circuit.
+            """
 
-        # Compile the attention module using stored calibration data (made of intermediary hidden
-        # states)
-        return self.q_attention.q_module.compile(configuration=configuration)
+            # Disable the FHE execution, as the following forward pass should be made in the clear along
+            # floating point values. This is done in order to properly calibrate and store the
+            # quantization parameters such as the scale and zero points
+            self.set_fhe_mode(fhe="disable", true_float=False)
 
+            # Execute a full pass in the clear
+            self.forward(inputset_ids, use_cache=False)
+
+            # Compile the attention module using stored calibration data (made of intermediary hidden
+            # states)
+            return self.q_attention.q_module.compile(configuration=configuration)
+
+    return QGPT2Model
 
 class SingleHeadAttention(QGPT2):
     """Class representing a single attention head implemented with quantization methods.
@@ -268,7 +274,7 @@ class QGPT2SingleHeadAttention(QGPT2Attention):
         return (attn_output, present)
 
 
-class SingleHeadQGPT2Model(QGPT2LMHeadModel):
+class SingleHeadQGPT2Model(qGPT2Model()):
     """QGPT2LMHeadModel implementation with a single attention head can be executed in FHE."""
 
     def __init__(self, config: GPT2Config, n_bits: int = 16, layer: int = 0):
@@ -426,7 +432,7 @@ class QGPT2MultiHeadsAttention(QGPT2Attention):
         return (attn_output, None)
 
 
-class MultiHeadsQGPT2Model(QGPT2LMHeadModel):
+class MultiHeadsQGPT2Model(qGPT2Model()):
     """QGPT2LMHeadModel implementation with multi-head attention that can be executed in FHE."""
 
     def __init__(self, config: GPT2Config, n_bits: int = 16, layer: int = 0):
@@ -435,80 +441,8 @@ class MultiHeadsQGPT2Model(QGPT2LMHeadModel):
         )
 
 
-
-from transformers import GPT2ForSequenceClassification
-
-class QGPT2ClassificationModel(GPT2ForSequenceClassification):
-    """Base class for integrating quantized operations within GPT2LMHeadModel's forward pass."""
-
-    def __init__(
-        self,
-        config: GPT2Config,
-        n_bits: int,
-        attention_module = QGPT2MultiHeadsAttention,
-        layer: int = 0,
-    ):
-        """Initialize the base class.
-
-        This class essentially overwrites GPT-2's attention module found in the layer whose index is
-        given with the given quantized module.
-
-        Args:
-            config (GPT2Config): GPT-2's configuration.
-            n_bits (int): The number of bits to use for quantizing the inputs, weights and
-                activations.
-            attention (Union[QGPT2SingleHeadAttention, QGPT2MultiHeadsAttention]): The quantized attention module
-                to consider.
-            layer (int): The index representing the GPT-2 layer to consider. Default to 0.
-        """
-        assert 0 <= layer <= 11, f"The GPT-2 model only has 12 layers, but got {layer}"
-
-        super().__init__(config)
-
-        self.transformer.h[layer].attn = attention_module(config, n_bits=n_bits, layer=layer)
-
-    @property
-    def q_attention(self) -> GPT2Attention:
-        """Get GPT-2's attention module found in the first layer.
-
-        Returns:
-            GPT2Attention: The attention module.
-        """
-        return self.transformer.h[0].attn
-
-    def set_fhe_mode(self, fhe: str = "disable", true_float: bool = False):
-        """Set the FHE mode for the module's forward pass.
-
-        fhe (str): The FHE mode to consider, either "disable", "simulate" or "execute". Default
-            to "disable".
-        true_float (bool): If the FHE mode is set to "disable", indicate if the operations
-            should be in floating points instead of being quantized. Default to False.
-        """
-        self.q_attention.set_fhe_mode(fhe=fhe, true_float=true_float)
-
-    def compile(
-        self, inputset_ids: torch.Tensor, configuration: Optional[Configuration] = None
-    ) -> Circuit:
-        """Compile the model using the stored calibration data.
-
-        Args:
-            inputset_ids (torch.Tensor): The token ids to consider as an inputset.
-            configuration (Optional[Configuration]): The configuration to use during compilation.
-                Default to None.
-
-        Returns:
-            Circuit: The underlying FHE circuit.
-        """
-
-        # Disable the FHE execution, as the following forward pass should be made in the clear along
-        # floating point values. This is done in order to properly calibrate and store the
-        # quantization parameters such as the scale and zero points
-        self.set_fhe_mode(fhe="disable", true_float=False)
-
-        # Execute a full pass in the clear
-        self.forward(inputset_ids, use_cache=False)
-
-        # Compile the attention module using stored calibration data (made of intermediary hidden
-        # states)
-        return self.q_attention.q_module.compile(configuration=configuration)
-
+class QGPT2ClassificationModel(qGPT2Model(GPT2ForSequenceClassification)):
+    def __init__(self, config: GPT2Config, n_bits: int = 16, layer: int = 0):
+        super().__init__(
+            config, n_bits=n_bits, attention_module=QGPT2SingleHeadAttention, layer=layer
+        )

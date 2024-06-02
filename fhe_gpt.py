@@ -1,11 +1,15 @@
-from model.qgpt2_models import MultiHeadsQGPT2Model
+from model.qgpt2_models import MultiHeadsQGPT2Model, SingleHeadQGPT2Model
 from transformers import GPT2Tokenizer, GPT2ForQuestionAnswering
+import time
+
+from logging import getLogger, ERROR
+getLogger("transformers.modeling_utils").setLevel(ERROR)
 
 
-# model = MultiHeadsQGPT2Model.from_pretrained("gpt2", n_bits=8, use_cache=False)
-# model.set_fhe_mode(fhe="disable", true_float=False)
+model = SingleHeadQGPT2Model.from_pretrained("gpt2", n_bits=5, use_cache=False)
+model.set_fhe_mode(fhe="disable", true_float=False)
 
-model = GPT2ForQuestionAnswering.from_pretrained("openai-community/gpt2")
+# model = GPT2ForQuestionAnswering.from_pretrained("openai-community/gpt2")
 
 tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
@@ -24,9 +28,23 @@ Sentiment: Neutral
 Review: "I had an issue with the product but customer service resolved it quickly. Satisfied with the support."
 Sentiment: """
 
-input_ids = tokenizer(user_input, return_tensors="pt")
+# user_input = "hello world"
 
-output_ids = model.generate(**input_ids, max_new_tokens=3)
+# input_ids = tokenizer(user_input, return_tensors="pt")
+
+from torch import tensor, topk
+
+tokens = tokenizer.encode(user_input)
+
+input_ids = tensor(tokens).unsqueeze(0)
+
+model.compile(input_ids)
+model.set_fhe_mode(fhe="simulate")
+max_tokens = 4
 
 
-print(tokenizer.decode(output_ids[0]))
+start = time.perf_counter()
+output = model(input_ids).logits
+end = time.perf_counter()
+
+print(f"Encoding {len(tokens)}, Run time: {end - start:.4f} seconds")
